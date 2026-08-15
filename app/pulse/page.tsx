@@ -1,3 +1,6 @@
+import { auth } from "@clerk/nextjs/server"
+import { redirect } from "next/navigation"
+
 import {
   Card,
   CardContent,
@@ -7,7 +10,12 @@ import {
 } from "@/components/ui/card"
 import { SourceInput } from "@/components/source-input"
 
-export default function PulsePage() {
+export default async function PulsePage() {
+  const { isAuthenticated } = await auth()
+
+  if (!isAuthenticated) {
+    redirect("/")
+  }
   return (
     <div className="flex flex-1 items-center justify-center bg-muted/40 px-4 py-12">
       <Card className="w-full max-w-2xl">
