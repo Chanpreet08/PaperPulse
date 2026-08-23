@@ -18,6 +18,7 @@ export async function extractFromFile(
   return registry.extract(input)
 }
 
+export { classifyUrl, extractFromUrl } from "./url"
 export { ExtractionError } from "./errors"
 export { ExtractionRegistry } from "./registry"
 export { PdfStrategy } from "./pdf-strategy"

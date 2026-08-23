@@ -3,6 +3,7 @@ export type ExtractionErrorCode =
   | "empty_file"
   | "corrupt_file"
   | "parse_error"
+  | "not_implemented"
 
 export class ExtractionError extends Error {
   readonly code: ExtractionErrorCode

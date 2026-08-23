@@ -42,3 +42,7 @@ next-env.d.ts
 
 # prisma
 /lib/generated
+
+# uploaded index files
+/uploads/*
+!/uploads/.gitkeep

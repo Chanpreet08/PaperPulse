@@ -23,7 +23,13 @@ import {
   resolveCollection,
 } from "./validate"
 
-const SOURCE_KINDS = new Set<SourceKind>(["pdf", "text", "transcript"])
+const SOURCE_KINDS = new Set<SourceKind>([
+  "pdf",
+  "text",
+  "transcript",
+  "youtube",
+  "website",
+])
 
 type PayloadFilter = {
   must: Array<{ key: string; match: { value: string } }>
