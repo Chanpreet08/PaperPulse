@@ -1,4 +1,9 @@
-export type SourceKind = "pdf" | "text" | "transcript"
+export type SourceKind =
+  | "pdf"
+  | "text"
+  | "transcript"
+  | "youtube"
+  | "website"
 
 export type ExtractionInput = {
   filename: string
