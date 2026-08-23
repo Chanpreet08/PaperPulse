@@ -4,7 +4,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Inter } from "next/font/google";
 
 import { ThemeProvider } from "@/components/providers/theme-provider";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import "./globals.css";
 
@@ -44,9 +43,6 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            <div className="absolute right-4 top-4 z-50">
-              <ThemeToggle />
-            </div>
             {children}
           </ThemeProvider>
         </ClerkProvider>
