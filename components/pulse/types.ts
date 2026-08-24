@@ -7,6 +7,7 @@ export type PulseSource = {
   type: SourceType
   label: string
   status: SourceStatus
+  jobId?: string
   file?: File
   url?: string
   chunkCount?: number
