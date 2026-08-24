@@ -1,15 +1,44 @@
-import { auth } from "@clerk/nextjs/server"
-import { NextResponse } from "next/server"
+import { auth, currentUser } from "@clerk/nextjs/server"
+import { after, NextResponse } from "next/server"
 
 import {
-  IndexError,
-  indexSource,
-} from "@/features/indexing"
+  createIndexJob,
+  IndexJobError,
+  processIndexJob,
+} from "@/features/index-jobs"
+import { IndexError } from "@/features/indexing"
+import { upsertUser, UserError } from "@/features/users"
 import { EmbeddingError } from "@/lib/embeddings"
 import { ExtractionError } from "@/lib/extraction"
 import { VectorStoreError } from "@/lib/vector-store"
 
+export const maxDuration = 300
+
 function errorResponse(error: unknown): NextResponse {
+  if (error instanceof UserError) {
+    switch (error.code) {
+      case "invalid_input":
+        return NextResponse.json({ error: error.message }, { status: 400 })
+      case "not_found":
+        return NextResponse.json({ error: error.message }, { status: 404 })
+      case "conflict":
+        return NextResponse.json({ error: error.message }, { status: 409 })
+      case "db_error":
+        return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+  }
+
+  if (error instanceof IndexJobError) {
+    switch (error.code) {
+      case "invalid_input":
+        return NextResponse.json({ error: error.message }, { status: 400 })
+      case "not_found":
+        return NextResponse.json({ error: error.message }, { status: 404 })
+      case "db_error":
+        return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+  }
+
   if (error instanceof IndexError) {
     switch (error.code) {
       case "invalid_path":
@@ -62,10 +91,39 @@ function errorResponse(error: unknown): NextResponse {
   return NextResponse.json({ error: message }, { status: 500 })
 }
 
+function clerkDisplayName(user: NonNullable<
+  Awaited<ReturnType<typeof currentUser>>
+>): string {
+  const fullName = [user.firstName, user.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim()
+  if (fullName) return fullName
+  if (user.username?.trim()) return user.username.trim()
+  return "User"
+}
+
 export async function POST(request: Request): Promise<NextResponse> {
   const { isAuthenticated } = await auth()
   if (!isAuthenticated) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const clerkUser = await currentUser()
+  if (!clerkUser) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const email =
+    clerkUser.emailAddresses.find(
+      (address) => address.id === clerkUser.primaryEmailAddressId
+    )?.emailAddress ?? clerkUser.emailAddresses[0]?.emailAddress
+
+  if (!email) {
+    return NextResponse.json(
+      { error: "Authenticated user has no email address." },
+      { status: 400 }
+    )
   }
 
   let formData: FormData
@@ -104,16 +162,33 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const result = hasFile
-      ? await indexSource({
-          type: "file",
-          filename: fileField.name,
-          mimeType: fileField.type || undefined,
-          bytes: new Uint8Array(await fileField.arrayBuffer()),
-        })
-      : await indexSource({ type: "url", url })
+    const user = await upsertUser({
+      email,
+      name: clerkDisplayName(clerkUser),
+      imageUrl: clerkUser.imageUrl,
+    })
 
-    return NextResponse.json(result)
+    const job = await createIndexJob(
+      hasFile
+        ? {
+            userId: user.id,
+            type: "file",
+            filename: fileField.name,
+            mimeType: fileField.type || undefined,
+            bytes: new Uint8Array(await fileField.arrayBuffer()),
+          }
+        : {
+            userId: user.id,
+            type: "url",
+            url,
+          }
+    )
+
+    after(() => {
+      void processIndexJob(job.id)
+    })
+
+    return NextResponse.json(job, { status: 202 })
   } catch (error) {
     return errorResponse(error)
   }

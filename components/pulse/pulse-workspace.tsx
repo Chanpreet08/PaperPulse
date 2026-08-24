@@ -66,8 +66,9 @@ export function PulseWorkspace() {
       }
 
       updateSource(source.id, {
+        jobId: response.id,
         status: "indexed",
-        chunkCount: response.chunkCount,
+        chunkCount: response.chunkCount ?? undefined,
         errorMessage: undefined,
       })
       toast.success(`Indexed ${response.source}`)

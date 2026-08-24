@@ -54,8 +54,11 @@ function getIndexFilesDir(): string {
 }
 
 export function resolveSafePath(filePath: string): string {
-  const base = path.resolve(getIndexFilesDir())
-  const resolved = path.resolve(base, filePath)
+  const configured = getIndexFilesDir()
+  const base = path.isAbsolute(configured)
+    ? path.resolve(/*turbopackIgnore: true*/ configured)
+    : path.resolve(/*turbopackIgnore: true*/ process.cwd(), configured)
+  const resolved = path.resolve(/*turbopackIgnore: true*/ base, filePath)
   const relative = path.relative(base, resolved)
 
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
@@ -81,7 +84,6 @@ export async function indexSource(
         })
       : await extractFromUrl(input.url)
   
-  // Todo: handle embedding creation in async mode.
   const chunks = await embedText(extracted.text, options?.embed)
   const points = await storeEmbeddings(
     {
