@@ -13,6 +13,13 @@ export function resolveCollection(override?: string): string {
 }
 
 export function assertStoreInput(input: StoreEmbeddingsInput): number {
+  if (!input.source.conversationId.trim()) {
+    throw new VectorStoreError(
+      "invalid_query",
+      "conversationId is required to store embeddings."
+    )
+  }
+
   if (input.chunks.length === 0) {
     throw new VectorStoreError(
       "empty_chunks",

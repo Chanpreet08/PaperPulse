@@ -34,6 +34,7 @@ export type IndexSourceInput =
   | { type: "url"; url: string }
 
 export type IndexOptions = {
+  conversationId: string
   embed?: EmbedOptions
   collection?: string
   vectorStore?: VectorStoreKind
@@ -73,8 +74,16 @@ export function resolveSafePath(filePath: string): string {
 
 export async function indexSource(
   input: IndexSourceInput,
-  options?: IndexOptions
+  options: IndexOptions
 ): Promise<IndexResult> {
+  const conversationId = options.conversationId.trim()
+  if (!conversationId) {
+    throw new IndexError(
+      "invalid_query",
+      "conversationId is required to index a source."
+    )
+  }
+
   const extracted =
     input.type === "file"
       ? await extractFromFile({
@@ -83,18 +92,19 @@ export async function indexSource(
           bytes: input.bytes,
         })
       : await extractFromUrl(input.url)
-  
-  const chunks = await embedText(extracted.text, options?.embed)
+
+  const chunks = await embedText(extracted.text, options.embed)
   const points = await storeEmbeddings(
     {
       chunks,
       source: {
         filename: extracted.filename,
         kind: extracted.kind,
+        conversationId,
       },
-      collection: options?.collection,
+      collection: options.collection,
     },
-    options?.vectorStore
+    options.vectorStore
   )
 
   return {

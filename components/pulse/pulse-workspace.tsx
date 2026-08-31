@@ -4,6 +4,7 @@ import * as React from "react"
 import { UserButton } from "@clerk/nextjs"
 import { toast } from "sonner"
 
+import { askConversation } from "@/components/pulse/ask-query"
 import { indexSourceOnServer } from "@/components/pulse/index-source"
 import {
   QueryInput,
@@ -19,9 +20,9 @@ import {
 } from "@/components/pulse/source-utils"
 import type {
   PulseConversation,
+  PulseMessage,
   PulseSource,
   PulseView,
-  QueryResult,
 } from "@/components/pulse/types"
 import { ThemeToggle } from "@/components/theme-toggle"
 
@@ -40,7 +41,7 @@ export function PulseWorkspace({
 }: PulseWorkspaceProps) {
   const [view, setView] = React.useState<PulseView>("query")
   const [sources, setSources] = React.useState<PulseSource[]>(initialSources)
-  const [conversations] =
+  const [conversations, setConversations] =
     React.useState<PulseConversation[]>(initialConversations)
   const [selectedSourceId, setSelectedSourceId] = React.useState<string | null>(
     initialSources[0]?.id ?? null
@@ -49,17 +50,20 @@ export function PulseWorkspace({
     null
   )
   const [query, setQuery] = React.useState("")
-  const [results, setResults] = React.useState<QueryResult[]>([])
+  const [isAsking, setIsAsking] = React.useState(false)
+  const [thinkingStatus, setThinkingStatus] = React.useState<
+    "thinking" | "retrieving" | "generating" | null
+  >(null)
 
   const selectedSource =
     sources.find((source) => source.id === selectedSourceId) ?? null
   const previewSource =
     sources.find((source) => source.id === previewSourceId) ?? null
+  const selectedConversationId =
+    selectedSource?.conversationId ?? selectedSourceId
   const selectedConversation =
     conversations.find(
-      (conversation) =>
-        conversation.id ===
-        (selectedSource?.conversationId ?? selectedSourceId)
+      (conversation) => conversation.id === selectedConversationId
     ) ?? null
 
   const updateSource = React.useCallback(
@@ -72,6 +76,24 @@ export function PulseWorkspace({
     },
     []
   )
+
+  function appendMessages(
+    conversationId: string,
+    nextMessages: PulseMessage[]
+  ) {
+    setConversations((current) =>
+      current.map((conversation) => {
+        if (conversation.id !== conversationId) return conversation
+        return {
+          ...conversation,
+          messages: [...conversation.messages, ...nextMessages],
+          lastMessageAt:
+            nextMessages[nextMessages.length - 1]?.createdAt ??
+            conversation.lastMessageAt,
+        }
+      })
+    )
+  }
 
   async function runIndexing(source: PulseSource) {
     try {
@@ -133,7 +155,6 @@ export function PulseWorkspace({
 
   function handleSelectSource(id: string) {
     setSelectedSourceId(id)
-    setResults([])
     setView("query")
   }
 
@@ -142,26 +163,127 @@ export function PulseWorkspace({
     setSelectedSourceId(sourceId)
   }
 
-  function handleSubmitQuery() {
+  async function handleSubmitQuery() {
     const trimmed = query.trim()
-    if (!trimmed) return
+    if (!trimmed || isAsking) return
 
-    if (sources.length === 0) {
-      toast.message("Add a source before asking questions.")
+    if (!selectedConversation) {
+      toast.message(
+        "Select an indexed conversation, or refresh after indexing finishes."
+      )
       return
     }
 
-    const source = selectedSource ?? sources[0]
-    setResults([
-      {
-        id: createSourceId(),
-        title: `Preview: ${source.label}`,
-        excerpt: `Query "${trimmed}" will search indexed chunks once retrieval is wired up. Open the preview panel to inspect the original source.`,
-        sourceId: source.id,
-      },
-    ])
-    setPreviewSourceId(source.id)
-    toast.message("Query UI is ready — retrieval API coming next.")
+    const conversationId = selectedConversation.id
+    setIsAsking(true)
+    setThinkingStatus("thinking")
+    setQuery("")
+
+    const optimisticUserId = createSourceId()
+    const optimisticAssistantId = createSourceId()
+
+    const optimisticUser: PulseMessage = {
+      id: optimisticUserId,
+      conversationId,
+      role: "USER",
+      status: "PENDING",
+      content: trimmed,
+      createdAt: new Date().toISOString(),
+    }
+    const optimisticAssistant: PulseMessage = {
+      id: optimisticAssistantId,
+      conversationId,
+      role: "ASSISTANT",
+      status: "PENDING",
+      content: "",
+      createdAt: new Date().toISOString(),
+    }
+    appendMessages(conversationId, [optimisticUser, optimisticAssistant])
+
+    try {
+      await askConversation(
+        {
+          conversationId,
+          message: trimmed,
+        },
+        {
+          onStatus: (status) => {
+            setThinkingStatus(status)
+          },
+          onUserMessage: (message) => {
+            setConversations((current) =>
+              current.map((conversation) => {
+                if (conversation.id !== conversationId) return conversation
+                return {
+                  ...conversation,
+                  messages: conversation.messages.map((item) =>
+                    item.id === optimisticUserId ? message : item
+                  ),
+                }
+              })
+            )
+          },
+          onDelta: (text) => {
+            setThinkingStatus(null)
+            setConversations((current) =>
+              current.map((conversation) => {
+                if (conversation.id !== conversationId) return conversation
+                return {
+                  ...conversation,
+                  messages: conversation.messages.map((item) =>
+                    item.id === optimisticAssistantId
+                      ? {
+                          ...item,
+                          content: `${item.content}${text}`,
+                          status: "PENDING",
+                        }
+                      : item
+                  ),
+                }
+              })
+            )
+          },
+          onDone: ({ assistantMessage }) => {
+            setConversations((current) =>
+              current.map((conversation) => {
+                if (conversation.id !== conversationId) return conversation
+                return {
+                  ...conversation,
+                  messages: conversation.messages.map((item) =>
+                    item.id === optimisticAssistantId ||
+                    item.id === assistantMessage.id
+                      ? assistantMessage
+                      : item
+                  ),
+                  lastMessageAt: assistantMessage.createdAt,
+                }
+              })
+            )
+          },
+        }
+      )
+    } catch (error) {
+      setConversations((current) =>
+        current.map((conversation) => {
+          if (conversation.id !== conversationId) return conversation
+          return {
+            ...conversation,
+            messages: conversation.messages.filter(
+              (message) =>
+                message.id !== optimisticUserId &&
+                message.id !== optimisticAssistantId
+            ),
+          }
+        })
+      )
+      const message =
+        error instanceof Error ? error.message : "Failed to answer query."
+      toast.error(message)
+      setQuery(trimmed)
+    } finally {
+      setIsAsking(false)
+      setThinkingStatus(null)
+    }
   }
 
   return (
@@ -174,7 +296,7 @@ export function PulseWorkspace({
           onSelectSource={handleSelectSource}
         />
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {view === "add-source" ? (
             <SourcePicker
               onBack={() => setView("query")}
@@ -192,14 +314,22 @@ export function PulseWorkspace({
                 sources={sources}
                 selectedSource={selectedSource}
                 messages={selectedConversation?.messages ?? []}
-                results={results}
+                isAsking={isAsking}
+                thinkingStatus={thinkingStatus}
                 onOpenPreview={handleOpenPreview}
               />
               <QueryInput
                 value={query}
                 onChange={setQuery}
-                onSubmit={handleSubmitQuery}
-                disabled={sources.length === 0}
+                onSubmit={() => {
+                  void handleSubmitQuery()
+                }}
+                disabled={!selectedConversation || isAsking}
+                placeholder={
+                  selectedConversation
+                    ? "Ask a question about this source..."
+                    : "Select an indexed conversation to ask questions"
+                }
               />
             </>
           )}

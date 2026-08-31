@@ -5,16 +5,14 @@ import path from "node:path"
 
 import { uuidv7 } from "uuidv7"
 
-import { DEFAULT_MODEL, INDEXED_WELCOME_MESSAGE } from "@/features/model"
 import { createConversation, updateConversation } from "@/features/conversations"
 import {
   IndexError,
   indexSource,
   resolveSafePath,
-  type IndexResult,
   type IndexSourceInput,
 } from "@/features/indexing"
-import { createMessage } from "@/features/messages"
+import { DEFAULT_MODEL } from "@/features/model"
 import { prisma } from "@/lib/db"
 import type { IndexJob } from "@/lib/generated/prisma/client"
 import type { IndexJobStatus } from "@/lib/generated/prisma/enums"
@@ -191,26 +189,13 @@ async function toIndexSourceInput(job: IndexJob): Promise<IndexSourceInput> {
   }
 }
 
-async function bootstrapIndexedConversation(
-  job: IndexJob,
-  result: IndexResult
-): Promise<void> {
+async function createJobConversation(job: IndexJob): Promise<string> {
   const conversation = await createConversation({
     userId: job.userId,
     model: DEFAULT_MODEL,
-    title: result.source,
+    title: job.label,
   })
-
-  const message = await createMessage({
-    conversationId: conversation.id,
-    role: "ASSISTANT",
-    status: "COMPLETED",
-    content: INDEXED_WELCOME_MESSAGE,
-  })
-
-  await updateConversation(conversation.id, {
-    lastMessageAt: message.createdAt,
-  })
+  return conversation.id
 }
 
 export async function processIndexJob(id: string): Promise<void> {
@@ -223,8 +208,18 @@ export async function processIndexJob(id: string): Promise<void> {
 
   if (job.status !== "indexing") return
 
+  let conversationId: string | null = null
+
   try {
-    const result = await indexSource(await toIndexSourceInput(job))
+    conversationId = await createJobConversation(job)
+
+    const result = await indexSource(await toIndexSourceInput(job), {
+      conversationId,
+    })
+
+    if (result.source && result.source !== job.label) {
+      await updateConversation(conversationId, { title: result.source })
+    }
 
     await markJob(id, {
       status: "indexed",
@@ -233,12 +228,6 @@ export async function processIndexJob(id: string): Promise<void> {
       label: result.source,
       errorMessage: null,
     })
-
-    try {
-      await bootstrapIndexedConversation(job, result)
-    } catch {
-      // Best-effort welcome conversation inside after()
-    }
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Indexing failed."

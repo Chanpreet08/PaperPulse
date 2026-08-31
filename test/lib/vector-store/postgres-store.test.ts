@@ -5,7 +5,11 @@ import { VectorStoreError } from "@/lib/vector-store/errors"
 
 const store = new PostgresVectorStore()
 const chunks = [{ index: 0, text: "hello", embedding: [0.1, 0.2] }]
-const source = { filename: "notes.txt", kind: "text" as const }
+const source = {
+  filename: "notes.txt",
+  kind: "text" as const,
+  conversationId: "01900000-0000-7000-8000-000000000020",
+}
 
 describe("PostgresVectorStore", () => {
   test("store throws not_implemented", async () => {

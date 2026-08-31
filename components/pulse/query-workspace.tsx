@@ -1,19 +1,12 @@
 "use client"
 
 import { FileText, Search, X } from "lucide-react"
+import ReactMarkdown from "react-markdown"
 
 import { sourceTypeLabel } from "@/components/pulse/source-utils"
-import type {
-  PulseMessage,
-  PulseSource,
-  QueryResult,
-} from "@/components/pulse/types"
+import type { PulseMessage, PulseSource } from "@/components/pulse/types"
 import { Button } from "@/components/ui/button"
-import {
-  Message,
-  MessageContent,
-  MessageGroup,
-} from "@/components/ui/message"
+import { Spinner } from "@/components/ui/spinner"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
@@ -24,135 +17,163 @@ const suggestedPrompts = [
   "Compare across sources",
 ]
 
+const thinkingLabels = {
+  thinking: "Thinking…",
+  retrieving: "Searching sources…",
+  generating: "Writing answer…",
+} as const
+
+type ThinkingStatus = keyof typeof thinkingLabels
+
 type QueryWorkspaceProps = {
   sources: PulseSource[]
   selectedSource: PulseSource | null
   messages: PulseMessage[]
-  results: QueryResult[]
+  isAsking?: boolean
+  thinkingStatus?: ThinkingStatus | null
   onOpenPreview: (sourceId: string) => void
+}
+
+function ChatMessage({
+  message,
+  thinkingStatus,
+}: {
+  message: PulseMessage
+  thinkingStatus?: ThinkingStatus | null
+}) {
+  const isUser = message.role === "USER"
+  const isStreamingAssistant =
+    !isUser && message.status === "PENDING" && message.content.length > 0
+  const isThinkingAssistant =
+    !isUser && message.status === "PENDING" && message.content.length === 0
+
+  return (
+    <div
+      className={cn(
+        "flex w-full",
+        isUser ? "justify-end" : "justify-start"
+      )}
+    >
+      <div
+        className={cn(
+          "w-fit max-w-[min(85%,36rem)] rounded-3xl px-3.5 py-2.5 text-sm leading-relaxed wrap-break-word",
+          isUser
+            ? "rounded-br-md bg-primary text-primary-foreground"
+            : "rounded-bl-md bg-muted text-foreground",
+          message.status === "PENDING" && isUser && "opacity-70"
+        )}
+      >
+        {isUser ? (
+          <p className="whitespace-pre-wrap">{message.content}</p>
+        ) : isThinkingAssistant ? (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Spinner className="size-3.5" />
+            <span>
+              {thinkingStatus ? thinkingLabels[thinkingStatus] : "Thinking…"}
+            </span>
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "[&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0",
+              "[&_ul]:my-2 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5",
+              "[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-5",
+              "[&_strong]:font-semibold",
+              "[&_a]:underline [&_a]:underline-offset-2",
+              "[&_code]:rounded [&_code]:bg-background/50 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[0.85em]"
+            )}
+          >
+            <ReactMarkdown>{message.content}</ReactMarkdown>
+            {isStreamingAssistant && (
+              <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-foreground/70 align-middle" />
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export function QueryWorkspace({
   sources,
   selectedSource,
   messages,
-  results,
-  onOpenPreview,
+  thinkingStatus = null,
 }: QueryWorkspaceProps) {
   const hasSources = sources.length > 0
   const hasMessages = messages.length > 0
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <ScrollArea className="flex-1">
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
-          <div className="min-h-[280px] rounded-2xl border border-border bg-card p-6 shadow-sm">
-            {!hasSources ? (
-              <div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-3 text-center">
-                <div className="flex size-12 items-center justify-center rounded-xl bg-muted">
-                  <FileText className="size-6 text-muted-foreground" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-base font-medium">No sources indexed yet</p>
-                  <p className="max-w-sm text-sm text-muted-foreground">
-                    Add PDFs, text files, transcripts, or links from the sidebar
-                    to start asking questions.
-                  </p>
-                </div>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 pt-6 pb-8">
+          {!hasSources ? (
+            <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
+              <div className="flex size-12 items-center justify-center rounded-xl bg-muted">
+                <FileText className="size-6 text-muted-foreground" />
               </div>
-            ) : hasMessages ? (
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Conversation
-                  </p>
-                  <h2 className="text-xl font-semibold tracking-tight">
-                    {selectedSource?.label ?? "Your library"}
-                  </h2>
-                </div>
-                <MessageGroup className="gap-4">
-                  {messages.map((message) => {
-                    const align = message.role === "USER" ? "end" : "start"
-                    return (
-                      <Message key={message.id} align={align}>
-                        <MessageContent>
-                          <div
-                            className={cn(
-                              "max-w-[85%] rounded-2xl px-4 py-3",
-                              message.role === "USER"
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted text-foreground"
-                            )}
-                          >
-                            <p className="whitespace-pre-wrap text-sm">
-                              {message.content}
-                            </p>
-                          </div>
-                        </MessageContent>
-                      </Message>
-                    )
-                  })}
-                </MessageGroup>
-              </div>
-            ) : results.length === 0 ? (
-              <div className="flex h-full min-h-[240px] flex-col justify-between gap-6">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Active source
-                  </p>
-                  <h2 className="text-2xl font-semibold tracking-tight">
-                    {selectedSource?.label ?? "Your library"}
-                  </h2>
-                  {selectedSource && (
-                    <p className="text-sm text-muted-foreground">
-                      {sourceTypeLabel(selectedSource.type)}
-                      {selectedSource.chunkCount
-                        ? ` · ${selectedSource.chunkCount} indexed chunks`
-                        : ""}
-                    </p>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Type a query below to search across your indexed content.
-                  Retrieval is coming soon — the layout is ready for results.
+              <div className="space-y-1">
+                <p className="text-base font-medium">No sources indexed yet</p>
+                <p className="max-w-sm text-sm text-muted-foreground">
+                  Add PDFs, text files, transcripts, or links from the sidebar
+                  to start asking questions.
                 </p>
               </div>
-            ) : (
-              <div className="space-y-4">
-                <h2 className="text-lg font-semibold">Results</h2>
-                <div className="space-y-3">
-                  {results.map((result) => (
-                    <button
-                      key={result.id}
-                      type="button"
-                      onClick={() => onOpenPreview(result.sourceId)}
-                      className="w-full rounded-xl border border-border bg-background px-4 py-3 text-left transition-colors hover:border-ring hover:bg-muted/40"
-                    >
-                      <p className="text-sm font-medium">{result.title}</p>
-                      <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-                        {result.excerpt}
-                      </p>
-                    </button>
-                  ))}
-                </div>
+            </div>
+          ) : hasMessages ? (
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">
+                  Conversation
+                </p>
+                <h2 className="text-xl font-semibold tracking-tight">
+                  {selectedSource?.label ?? "Your library"}
+                </h2>
               </div>
-            )}
-          </div>
+              <div className="flex flex-col gap-3">
+                {messages.map((message) => (
+                  <ChatMessage
+                    key={message.id}
+                    message={message}
+                    thinkingStatus={thinkingStatus}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="flex min-h-[240px] flex-col justify-between gap-6 rounded-2xl border border-border bg-card p-6 shadow-sm">
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">
+                  Active source
+                </p>
+                <h2 className="text-2xl font-semibold tracking-tight">
+                  {selectedSource?.label ?? "Your library"}
+                </h2>
+                {selectedSource && (
+                  <p className="text-sm text-muted-foreground">
+                    {sourceTypeLabel(selectedSource.type)}
+                    {selectedSource.chunkCount
+                      ? ` · ${selectedSource.chunkCount} indexed chunks`
+                      : ""}
+                  </p>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Ask a question below. We embed your query, retrieve matching
+                passages from this source, and answer with the model.
+              </p>
+            </div>
+          )}
 
           {hasSources && !hasMessages && (
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               {suggestedPrompts.map((prompt) => (
-                <button
+                <div
                   key={prompt}
-                  type="button"
-                  onClick={() => {
-                    const source = selectedSource ?? sources[0]
-                    if (source) onOpenPreview(source.id)
-                  }}
-                  className="rounded-xl border border-border bg-muted/30 px-4 py-5 text-left text-sm font-medium transition-colors hover:border-ring hover:bg-muted/50"
+                  className="rounded-xl border border-border bg-muted/30 px-4 py-5 text-left text-sm font-medium text-muted-foreground"
                 >
                   {prompt}
-                </button>
+                </div>
               ))}
             </div>
           )}
@@ -167,6 +188,7 @@ type QueryInputProps = {
   onChange: (value: string) => void
   onSubmit: () => void
   disabled?: boolean
+  placeholder?: string
 }
 
 export function QueryInput({
@@ -174,9 +196,10 @@ export function QueryInput({
   onChange,
   onSubmit,
   disabled = false,
+  placeholder = "Type a query here...",
 }: QueryInputProps) {
   return (
-    <div className="border-t border-border bg-background/95 px-4 py-4 backdrop-blur supports-backdrop-filter:bg-background/80">
+    <div className="shrink-0 border-t border-border bg-background px-4 py-4">
       <form
         className="mx-auto flex max-w-5xl items-center gap-2"
         onSubmit={(event) => {
@@ -190,7 +213,7 @@ export function QueryInput({
             value={value}
             onChange={(event) => onChange(event.target.value)}
             disabled={disabled}
-            placeholder="Type a query here..."
+            placeholder={placeholder}
             className={cn(
               "h-11 w-full rounded-2xl border border-input bg-background pr-4 pl-10 text-sm shadow-sm outline-none transition-colors",
               "placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30",
@@ -216,7 +239,7 @@ export function QueryWorkspaceHeader({
   onClosePreview?: () => void
 }) {
   return (
-    <header className="flex items-center justify-between border-b border-border px-6 py-4">
+    <header className="flex shrink-0 items-center justify-between border-b border-border px-6 py-4">
       <div>
         <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
           Paper Pulse

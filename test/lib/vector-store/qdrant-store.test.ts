@@ -35,7 +35,11 @@ const chunks = [
   { index: 0, text: "hello", embedding: [0.1, 0.2, 0.3] },
   { index: 1, text: "world", embedding: [0.4, 0.5, 0.6] },
 ]
-const source = { filename: "notes.txt", kind: "text" as const }
+const source = {
+  filename: "notes.txt",
+  kind: "text" as const,
+  conversationId: "01900000-0000-7000-8000-000000000020",
+}
 
 describe("QdrantVectorStore", () => {
   test("throws empty_chunks when there are no chunks", async () => {
@@ -93,10 +97,11 @@ describe("QdrantVectorStore", () => {
       index: 0,
       filename: "notes.txt",
       kind: "text",
+      conversationId: "01900000-0000-7000-8000-000000000020",
     })
   })
 
-  test("retrieveSimilar returns scored chunks and passes filename filter", async () => {
+  test("retrieveSimilar returns scored chunks and passes conversationId filter", async () => {
     process.env.QDRANT_URL = "http://localhost:6333"
     query.mockImplementation(async () => ({
       points: [
@@ -108,6 +113,7 @@ describe("QdrantVectorStore", () => {
             index: 0,
             filename: "notes.txt",
             kind: "text",
+            conversationId: "01900000-0000-7000-8000-000000000020",
           },
           vector: [0.1, 0.2, 0.3],
         },
@@ -118,7 +124,7 @@ describe("QdrantVectorStore", () => {
     const hits = await store.retrieveSimilar({
       embedding: [0.1, 0.2, 0.3],
       limit: 3,
-      filter: { filename: "notes.txt" },
+      filter: { conversationId: "01900000-0000-7000-8000-000000000020" },
     })
 
     const queryArgs = query.mock.calls.at(-1) as unknown as [
@@ -126,7 +132,12 @@ describe("QdrantVectorStore", () => {
       { filter: unknown },
     ]
     expect(queryArgs[1].filter).toEqual({
-      must: [{ key: "filename", match: { value: "notes.txt" } }],
+      must: [
+        {
+          key: "conversationId",
+          match: { value: "01900000-0000-7000-8000-000000000020" },
+        },
+      ],
     })
     expect(hits).toEqual([
       {
@@ -135,6 +146,7 @@ describe("QdrantVectorStore", () => {
         text: "hello",
         filename: "notes.txt",
         kind: "text",
+        conversationId: "01900000-0000-7000-8000-000000000020",
         score: 0.9,
         embedding: [0.1, 0.2, 0.3],
       },

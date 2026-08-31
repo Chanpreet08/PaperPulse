@@ -4,8 +4,6 @@ import { createGoogleGenerativeAI, type GoogleProvider } from "@ai-sdk/google"
 import { openai, type OpenAIProvider } from "@ai-sdk/openai"
 
 export const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "gemini-3.5-flash"
-export const INDEXED_WELCOME_MESSAGE = "What can we do for you?"
-
 const google = createGoogleGenerativeAI({
   apiKey: process.env.GEMINI_API_KEY,
 })
