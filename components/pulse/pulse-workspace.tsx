@@ -17,18 +17,33 @@ import {
   getFileSourceType,
   getUrlSourceType,
 } from "@/components/pulse/source-utils"
-import type { PulseSource, PulseView, QueryResult } from "@/components/pulse/types"
+import type {
+  PulseConversation,
+  PulseSource,
+  PulseView,
+  QueryResult,
+} from "@/components/pulse/types"
 import { ThemeToggle } from "@/components/theme-toggle"
 
 function createSourceId() {
   return crypto.randomUUID()
 }
 
-export function PulseWorkspace() {
+type PulseWorkspaceProps = {
+  initialConversations?: PulseConversation[]
+  initialSources?: PulseSource[]
+}
+
+export function PulseWorkspace({
+  initialConversations = [],
+  initialSources = [],
+}: PulseWorkspaceProps) {
   const [view, setView] = React.useState<PulseView>("query")
-  const [sources, setSources] = React.useState<PulseSource[]>([])
+  const [sources, setSources] = React.useState<PulseSource[]>(initialSources)
+  const [conversations] =
+    React.useState<PulseConversation[]>(initialConversations)
   const [selectedSourceId, setSelectedSourceId] = React.useState<string | null>(
-    null
+    initialSources[0]?.id ?? null
   )
   const [previewSourceId, setPreviewSourceId] = React.useState<string | null>(
     null
@@ -40,6 +55,12 @@ export function PulseWorkspace() {
     sources.find((source) => source.id === selectedSourceId) ?? null
   const previewSource =
     sources.find((source) => source.id === previewSourceId) ?? null
+  const selectedConversation =
+    conversations.find(
+      (conversation) =>
+        conversation.id ===
+        (selectedSource?.conversationId ?? selectedSourceId)
+    ) ?? null
 
   const updateSource = React.useCallback(
     (id: string, patch: Partial<PulseSource>) => {
@@ -112,6 +133,7 @@ export function PulseWorkspace() {
 
   function handleSelectSource(id: string) {
     setSelectedSourceId(id)
+    setResults([])
     setView("query")
   }
 
@@ -169,6 +191,7 @@ export function PulseWorkspace() {
               <QueryWorkspace
                 sources={sources}
                 selectedSource={selectedSource}
+                messages={selectedConversation?.messages ?? []}
                 results={results}
                 onOpenPreview={handleOpenPreview}
               />

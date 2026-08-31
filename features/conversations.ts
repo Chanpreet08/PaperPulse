@@ -3,7 +3,7 @@ import "server-only"
 import { uuidv7 } from "uuidv7"
 
 import { prisma } from "@/lib/db"
-import type { Conversation } from "@/lib/generated/prisma/client"
+import type { Conversation, Message } from "@/lib/generated/prisma/client"
 import { Prisma } from "@/lib/generated/prisma/client"
 
 export type ConversationErrorCode =
@@ -45,6 +45,14 @@ export type UpdateConversationInput = {
   isPinned?: boolean
   isArchived?: boolean
   lastMessageAt?: Date
+}
+
+export type ConversationWithMessages = Conversation & {
+  messages: Message[]
+}
+
+export type ListConversationsForUserOptions = {
+  includeArchived?: boolean
 }
 
 function assertNonEmpty(value: string, field: string): string {
@@ -134,6 +142,38 @@ export async function getConversation(id: string): Promise<Conversation> {
   return conversation
 }
 
+export async function listConversationsForUser(
+  userId: string,
+  options: ListConversationsForUserOptions = {}
+): Promise<ConversationWithMessages[]> {
+  const id = assertNonEmpty(userId, "userId")
+  const includeArchived = options.includeArchived ?? false
+
+  try {
+    return await prisma.conversation.findMany({
+      where: {
+        userId: id,
+        ...(includeArchived ? {} : { isArchived: false }),
+      },
+      include: {
+        messages: {
+          orderBy: { createdAt: "asc" },
+        },
+      },
+      orderBy: [
+        { isPinned: "desc" },
+        { lastMessageAt: "desc" },
+      ],
+    })
+  } catch (error) {
+    throw new ConversationError(
+      "db_error",
+      "Failed to list conversations.",
+      { cause: error }
+    )
+  }
+}
+
 export async function updateConversation(
   id: string,
   input: UpdateConversationInput
@@ -210,4 +250,4 @@ export async function deleteConversation(id: string): Promise<Conversation> {
   }
 }
 
-export type { Conversation }
+export type { Conversation, Message }

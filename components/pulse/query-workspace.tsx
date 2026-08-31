@@ -1,11 +1,19 @@
 "use client"
 
-import * as React from "react"
 import { FileText, Search, X } from "lucide-react"
 
 import { sourceTypeLabel } from "@/components/pulse/source-utils"
-import type { PulseSource, QueryResult } from "@/components/pulse/types"
+import type {
+  PulseMessage,
+  PulseSource,
+  QueryResult,
+} from "@/components/pulse/types"
 import { Button } from "@/components/ui/button"
+import {
+  Message,
+  MessageContent,
+  MessageGroup,
+} from "@/components/ui/message"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
@@ -19,6 +27,7 @@ const suggestedPrompts = [
 type QueryWorkspaceProps = {
   sources: PulseSource[]
   selectedSource: PulseSource | null
+  messages: PulseMessage[]
   results: QueryResult[]
   onOpenPreview: (sourceId: string) => void
 }
@@ -26,10 +35,12 @@ type QueryWorkspaceProps = {
 export function QueryWorkspace({
   sources,
   selectedSource,
+  messages,
   results,
   onOpenPreview,
 }: QueryWorkspaceProps) {
   const hasSources = sources.length > 0
+  const hasMessages = messages.length > 0
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -48,6 +59,40 @@ export function QueryWorkspace({
                     to start asking questions.
                   </p>
                 </div>
+              </div>
+            ) : hasMessages ? (
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Conversation
+                  </p>
+                  <h2 className="text-xl font-semibold tracking-tight">
+                    {selectedSource?.label ?? "Your library"}
+                  </h2>
+                </div>
+                <MessageGroup className="gap-4">
+                  {messages.map((message) => {
+                    const align = message.role === "USER" ? "end" : "start"
+                    return (
+                      <Message key={message.id} align={align}>
+                        <MessageContent>
+                          <div
+                            className={cn(
+                              "max-w-[85%] rounded-2xl px-4 py-3",
+                              message.role === "USER"
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted text-foreground"
+                            )}
+                          >
+                            <p className="whitespace-pre-wrap text-sm">
+                              {message.content}
+                            </p>
+                          </div>
+                        </MessageContent>
+                      </Message>
+                    )
+                  })}
+                </MessageGroup>
               </div>
             ) : results.length === 0 ? (
               <div className="flex h-full min-h-[240px] flex-col justify-between gap-6">
@@ -94,7 +139,7 @@ export function QueryWorkspace({
             )}
           </div>
 
-          {hasSources && (
+          {hasSources && !hasMessages && (
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               {suggestedPrompts.map((prompt) => (
                 <button
