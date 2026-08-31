@@ -40,10 +40,3 @@ export type PulseConversation = {
 }
 
 export type PulseView = "query" | "add-source"
-
-export type QueryResult = {
-  id: string
-  title: string
-  excerpt: string
-  sourceId: string
-}

@@ -14,12 +14,10 @@ export function ThemeToggle() {
     setMounted(true)
   }, [])
 
+  // Avoid rendering the interactive Button until after mount so server HTML
+  // matches the first client paint (next-themes has no theme on the server).
   if (!mounted) {
-    return (
-      <Button variant="ghost" size="icon-sm" aria-label="Toggle theme" disabled>
-        <Sun />
-      </Button>
-    )
+    return <div className="size-7" aria-hidden />
   }
 
   const isDark = resolvedTheme === "dark"

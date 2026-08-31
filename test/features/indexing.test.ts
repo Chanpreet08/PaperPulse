@@ -63,11 +63,14 @@ describe("indexSource", () => {
     const fixturePath = path.join(import.meta.dir, "fixtures", "sample.txt")
     const bytes = await readFile(fixturePath)
 
-    const result = await indexSource({
-      type: "file",
-      filename: "sample.txt",
-      bytes: new Uint8Array(bytes),
-    })
+    const result = await indexSource(
+      {
+        type: "file",
+        filename: "sample.txt",
+        bytes: new Uint8Array(bytes),
+      },
+      { conversationId: "01900000-0000-7000-8000-000000000020" }
+    )
 
     expect(result).toEqual({
       source: "sample.txt",
@@ -75,14 +78,27 @@ describe("indexSource", () => {
       chunkCount: 1,
       points: [{ id: "point-1", index: 0 }],
     })
+    expect(vectorStore.storeEmbeddings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: expect.objectContaining({
+          conversationId: "01900000-0000-7000-8000-000000000020",
+          filename: "sample.txt",
+          kind: "text",
+        }),
+      }),
+      undefined
+    )
   })
 
   test("propagates not_implemented from URL extraction", async () => {
     try {
-      await indexSource({
-        type: "url",
-        url: "https://example.com/article",
-      })
+      await indexSource(
+        {
+          type: "url",
+          url: "https://example.com/article",
+        },
+        { conversationId: "01900000-0000-7000-8000-000000000020" }
+      )
       throw new Error("Expected ExtractionError")
     } catch (error) {
       expect(error).toBeInstanceOf(ExtractionError)

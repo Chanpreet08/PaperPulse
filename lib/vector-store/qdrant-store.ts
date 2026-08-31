@@ -58,6 +58,7 @@ export class QdrantVectorStore implements VectorStore {
             index: chunk.index,
             filename: input.source.filename,
             kind: input.source.kind,
+            conversationId: input.source.conversationId,
           },
         }
       })
@@ -119,6 +120,7 @@ export class QdrantVectorStore implements VectorStore {
           filter: this.buildFilter({
             filename: input.filename,
             kind: input.kind,
+            conversationId: input.conversationId,
           }),
           limit: SCROLL_PAGE_SIZE,
           offset: offset as never,
@@ -184,12 +186,19 @@ export class QdrantVectorStore implements VectorStore {
   }
 
   private buildFilter(filter?: {
+    conversationId?: string
     filename?: string
     kind?: SourceKind
   }): PayloadFilter | undefined {
     if (!filter) return undefined
 
     const must: PayloadFilter["must"] = []
+    if (filter.conversationId) {
+      must.push({
+        key: "conversationId",
+        match: { value: filter.conversationId },
+      })
+    }
     if (filter.filename) {
       must.push({ key: "filename", match: { value: filter.filename } })
     }
@@ -220,6 +229,10 @@ export class QdrantVectorStore implements VectorStore {
 
     const index = typeof payload.index === "number" ? payload.index : 0
     const embedding = this.asVector(point.vector)
+    const conversationId =
+      typeof payload.conversationId === "string"
+        ? payload.conversationId
+        : undefined
 
     return {
       id: String(point.id),
@@ -227,6 +240,7 @@ export class QdrantVectorStore implements VectorStore {
       text: payload.text,
       filename: payload.filename,
       kind: kind as SourceKind,
+      conversationId,
       score: score ?? point.score,
       embedding,
     }

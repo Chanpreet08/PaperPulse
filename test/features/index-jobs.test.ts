@@ -2,8 +2,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 
 import * as conversations from "@/features/conversations"
 import * as indexing from "@/features/indexing"
-import * as messages from "@/features/messages"
-import type { Conversation, IndexJob, Message } from "@/lib/generated/prisma/client"
+import type { Conversation, IndexJob } from "@/lib/generated/prisma/client"
 
 const store = {
   create: mock(
@@ -60,19 +59,6 @@ const sampleConversation: Conversation = {
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
   updatedAt: new Date("2026-01-01T00:00:00.000Z"),
   lastMessageAt: new Date("2026-01-01T00:00:00.000Z"),
-}
-
-const sampleMessage: Message = {
-  id: "01900000-0000-7000-8000-000000000030",
-  conversationId: sampleConversation.id,
-  role: "ASSISTANT",
-  status: "COMPLETED",
-  content: "What can we do for you?",
-  parts: null,
-  metadata: null,
-  parentMessageId: null,
-  createdAt: new Date("2026-01-01T00:00:00.000Z"),
-  updatedAt: new Date("2026-01-01T00:00:00.000Z"),
 }
 
 const spies: Array<ReturnType<typeof spyOn>> = []
@@ -162,19 +148,30 @@ describe("processIndexJob", () => {
       spyOn(conversations, "createConversation").mockResolvedValue(
         sampleConversation
       ),
-      spyOn(messages, "createMessage").mockResolvedValue(sampleMessage),
       spyOn(conversations, "updateConversation").mockResolvedValue({
         ...sampleConversation,
-        lastMessageAt: sampleMessage.createdAt,
+        title: "sample.txt",
       })
     )
 
     await processIndexJob(sampleJob.id)
 
-    expect(indexing.indexSource).toHaveBeenCalledWith({
-      type: "url",
-      url: "https://example.com",
+    expect(conversations.createConversation).toHaveBeenCalledWith({
+      userId: sampleJob.userId,
+      model: "gemini-3.5-flash",
+      title: sampleJob.label,
     })
+    expect(indexing.indexSource).toHaveBeenCalledWith(
+      {
+        type: "url",
+        url: "https://example.com",
+      },
+      { conversationId: sampleConversation.id }
+    )
+    expect(conversations.updateConversation).toHaveBeenCalledWith(
+      sampleConversation.id,
+      { title: "sample.txt" }
+    )
     expect(store.update).toHaveBeenCalledWith({
       where: { id: sampleJob.id },
       data: {
@@ -185,21 +182,6 @@ describe("processIndexJob", () => {
         errorMessage: null,
       },
     })
-    expect(conversations.createConversation).toHaveBeenCalledWith({
-      userId: sampleJob.userId,
-      model: "gemini-3.5-flash",
-      title: "sample.txt",
-    })
-    expect(messages.createMessage).toHaveBeenCalledWith({
-      conversationId: sampleConversation.id,
-      role: "ASSISTANT",
-      status: "COMPLETED",
-      content: "What can we do for you?",
-    })
-    expect(conversations.updateConversation).toHaveBeenCalledWith(
-      sampleConversation.id,
-      { lastMessageAt: sampleMessage.createdAt }
-    )
   })
 
   test("marks the job as error when indexing fails", async () => {
@@ -210,13 +192,15 @@ describe("processIndexJob", () => {
       errorMessage: "boom",
     })
     spies.push(
-      spyOn(indexing, "indexSource").mockRejectedValue(new Error("boom")),
-      spyOn(conversations, "createConversation"),
-      spyOn(messages, "createMessage")
+      spyOn(conversations, "createConversation").mockResolvedValue(
+        sampleConversation
+      ),
+      spyOn(indexing, "indexSource").mockRejectedValue(new Error("boom"))
     )
 
     await processIndexJob(sampleJob.id)
 
+    expect(conversations.createConversation).toHaveBeenCalled()
     expect(store.update).toHaveBeenCalledWith({
       where: { id: sampleJob.id },
       data: {
@@ -224,7 +208,5 @@ describe("processIndexJob", () => {
         errorMessage: "boom",
       },
     })
-    expect(conversations.createConversation).not.toHaveBeenCalled()
-    expect(messages.createMessage).not.toHaveBeenCalled()
   })
 })

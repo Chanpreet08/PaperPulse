@@ -8,6 +8,7 @@ export type StoreEmbeddingsInput = {
   source: {
     filename: string
     kind: SourceKind
+    conversationId: string
   }
   collection?: string
 }
@@ -16,6 +17,7 @@ export type RetrieveSimilarInput = {
   embedding: number[]
   limit?: number
   filter?: {
+    conversationId?: string
     filename?: string
     kind?: SourceKind
   }
@@ -25,6 +27,7 @@ export type RetrieveSimilarInput = {
 export type RetrieveBySourceInput = {
   filename: string
   kind?: SourceKind
+  conversationId?: string
   collection?: string
 }
 
@@ -39,6 +42,7 @@ export type RetrievedChunk = {
   text: string
   filename: string
   kind: SourceKind
+  conversationId?: string
   score?: number
   embedding: number[]
 }
